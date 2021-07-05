@@ -43,9 +43,15 @@ class Location implements LocationPlatform {
   }
 
   /// Enables or disables service in the background mode.
+  /// [foregroundOnly] only applies to Android, and not require
+  /// Manifest.permission.ACCESS_BACKGROUND_LOCATION permissions when this
+  /// function is called with [enable]=true. This way the location service runs
+  /// as a foreground service only.
   @override
-  Future<bool> enableBackgroundMode({bool? enable = true}) {
-    return LocationPlatform.instance.enableBackgroundMode(enable: enable);
+  Future<bool> enableBackgroundMode(
+      {bool? enable = true, bool foregroundOnly = false}) {
+    return LocationPlatform.instance
+        .enableBackgroundMode(enable: enable, foregroundOnly: foregroundOnly);
   }
 
   /// Gets the current location of the user.

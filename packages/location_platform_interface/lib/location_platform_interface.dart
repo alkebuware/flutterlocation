@@ -10,6 +10,7 @@ import 'package:meta/meta.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 part 'src/method_channel_location.dart';
+
 part 'src/types.dart';
 
 class LocationPlatform extends PlatformInterface {
@@ -53,7 +54,12 @@ class LocationPlatform extends PlatformInterface {
   }
 
   /// Enables or disables service in the background mode.
-  Future<bool> enableBackgroundMode({bool? enable}) {
+  /// [foregroundOnly] only applies to Android, and not require
+  /// Manifest.permission.ACCESS_BACKGROUND_LOCATION permissions when this
+  /// function is called with [enable]=true. This way the location service runs
+  /// as a foreground service only.
+  Future<bool> enableBackgroundMode(
+      {bool? enable, bool foregroundOnly = false}) {
     throw UnimplementedError();
   }
 

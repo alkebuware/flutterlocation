@@ -67,11 +67,15 @@ class MethodChannelLocation extends LocationPlatform {
   }
 
   /// Enables or disables service in the background mode.
+  /// [foregroundOnly] only applies to Android, and removes the requirement of
+  /// having Manifest.permission.ACCESS_BACKGROUND_LOCATION permissions when
+  /// this function is called with [enable]=true. This way the location service
+  /// runs as a foreground service only.
   @override
-  Future<bool> enableBackgroundMode({bool? enable}) async {
+  Future<bool> enableBackgroundMode({bool? enable, bool foregroundOnly = false}) async {
     final int? result = await _methodChannel!.invokeMethod(
       'enableBackgroundMode',
-      <String, dynamic>{'enable': enable},
+      <String, dynamic>{'enable': enable, 'foregroundOnly': foregroundOnly},
     );
 
     return result == 1;
