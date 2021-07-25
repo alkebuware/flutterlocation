@@ -86,6 +86,7 @@ class BackgroundNotification(
             .setSmallIcon(iconId)
             .setContentText(options.subtitle)
             .setSubText(options.description)
+            .setOngoing(true)
 
         builder = if (options.color != null) {
             builder.setColor(options.color).setColorized(true)

@@ -17,6 +17,7 @@ import android.os.Looper;
 import android.util.Log;
 import android.util.SparseArray;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 
@@ -30,6 +31,12 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsStatusCodes;
 import com.google.android.gms.location.SettingsClient;
+import com.google.android.gms.tasks.CancellationToken;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnTokenCanceledListener;
+import com.google.android.gms.tasks.Task;
+
+import org.jetbrains.annotations.NotNull;
 
 import io.flutter.plugin.common.EventChannel.EventSink;
 import io.flutter.plugin.common.MethodChannel.Result;
@@ -127,8 +134,11 @@ public class FlutterLocation
                 && permissions[0].equals(Manifest.permission.ACCESS_FINE_LOCATION)) {
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Checks if this permission was automatically triggered by a location request
-                if (getLocationResult != null || events != null) {
+                if (events != null) {
                     startRequestingLocation();
+                }
+                if(getLocationResult != null){
+                    getCurrentLocation(getLocationResult);
                 }
                 if (result != null) {
                     result.success(1);
@@ -224,52 +234,8 @@ public class FlutterLocation
             public void onLocationResult(LocationResult locationResult) {
                 super.onLocationResult(locationResult);
                 Location location = locationResult.getLastLocation();
-                HashMap<String, Object> loc = new HashMap<>();
-                loc.put("latitude", location.getLatitude());
-                loc.put("longitude", location.getLongitude());
-                loc.put("accuracy", (double) location.getAccuracy());
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    loc.put("verticalAccuracy", (double) location.getVerticalAccuracyMeters());
-                    loc.put("headingAccuracy", (double) location.getBearingAccuracyDegrees());
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    loc.put("elapsedRealtimeUncertaintyNanos", (double) location.getElapsedRealtimeUncertaintyNanos());
-                }
+                HashMap<String, Object> loc = buildLocationMap(location);
 
-                loc.put("provider", location.getProvider());
-                final Bundle extras = location.getExtras();
-                if (extras != null) {
-                    loc.put("satelliteNumber", location.getExtras().getInt("satellites"));
-                }
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-                    loc.put("elapsedRealtimeNanos", (double) location.getElapsedRealtimeNanos());
-
-                    if (location.isFromMockProvider()) {
-                        loc.put("isMock", (double) 1);
-                    }
-                } else {
-                    loc.put("isMock", (double) 0);
-                }
-
-                // Using NMEA Data to get MSL level altitude
-                if (mLastMslAltitude == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                    loc.put("altitude", location.getAltitude());
-                } else {
-                    loc.put("altitude", mLastMslAltitude);
-                }
-
-                loc.put("speed", (double) location.getSpeed());
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    loc.put("speed_accuracy", (double) location.getSpeedAccuracyMetersPerSecond());
-                }
-                loc.put("heading", (double) location.getBearing());
-                loc.put("time", (double) location.getTime());
-
-                if (getLocationResult != null) {
-                    getLocationResult.success(loc);
-                    getLocationResult = null;
-                }
                 if (events != null) {
                     events.success(loc);
                 } else {
@@ -430,33 +396,105 @@ public class FlutterLocation
                                 .requestLocationUpdates(mLocationRequest, mLocationCallback, Looper.myLooper());
                     }
                 }).addOnFailureListener(activity, e -> {
-                    if (e instanceof ResolvableApiException) {
-                        ResolvableApiException rae = (ResolvableApiException) e;
-                        int statusCode = rae.getStatusCode();
-                        if (statusCode == LocationSettingsStatusCodes.RESOLUTION_REQUIRED) {
-                            try {
-                                // Show the dialog by calling startResolutionForResult(), and check the
-                                // result in onActivityResult().
-                                rae.startResolutionForResult(activity, REQUEST_CHECK_SETTINGS);
-                            } catch (IntentSender.SendIntentException sie) {
-                                Log.i(TAG, "PendingIntent unable to execute request.");
-                            }
-                        }
-                    } else {
-                        ApiException ae = (ApiException) e;
-                        int statusCode = ae.getStatusCode();
-                        if (statusCode == LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE) {// This error code happens during AirPlane mode.
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                                locationManager.addNmeaListener(mMessageListener, null);
-                            }
-                            mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback,
-                                    Looper.myLooper());
-                        } else {// This should not happen according to Android documentation but it has been
-                            // observed on some phones.
-                            sendError("UNEXPECTED_ERROR", e.getMessage(), null);
-                        }
+            if (e instanceof ResolvableApiException) {
+                ResolvableApiException rae = (ResolvableApiException) e;
+                int statusCode = rae.getStatusCode();
+                if (statusCode == LocationSettingsStatusCodes.RESOLUTION_REQUIRED) {
+                    try {
+                        // Show the dialog by calling startResolutionForResult(), and check the
+                        // result in onActivityResult().
+                        rae.startResolutionForResult(activity, REQUEST_CHECK_SETTINGS);
+                    } catch (IntentSender.SendIntentException sie) {
+                        Log.i(TAG, "PendingIntent unable to execute request.");
                     }
-                });
+                }
+            } else {
+                ApiException ae = (ApiException) e;
+                int statusCode = ae.getStatusCode();
+                if (statusCode == LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE) {// This error code happens during AirPlane mode.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        locationManager.addNmeaListener(mMessageListener, null);
+                    }
+                    mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback,
+                            Looper.myLooper());
+                } else {// This should not happen according to Android documentation but it has been
+                    // observed on some phones.
+                    sendError("UNEXPECTED_ERROR", e.getMessage(), null);
+                }
+            }
+        });
     }
 
+    private HashMap<String, Object> buildLocationMap(Location location) {
+        if(location == null) return null;
+        HashMap<String, Object> loc = new HashMap<>();
+        loc.put("latitude", location.getLatitude());
+        loc.put("longitude", location.getLongitude());
+        loc.put("accuracy", (double) location.getAccuracy());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            loc.put("verticalAccuracy", (double) location.getVerticalAccuracyMeters());
+            loc.put("headingAccuracy", (double) location.getBearingAccuracyDegrees());
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            loc.put("elapsedRealtimeUncertaintyNanos", (double) location.getElapsedRealtimeUncertaintyNanos());
+        }
+
+        loc.put("provider", location.getProvider());
+        final Bundle extras = location.getExtras();
+        if (extras != null) {
+            loc.put("satelliteNumber", location.getExtras().getInt("satellites"));
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            loc.put("elapsedRealtimeNanos", (double) location.getElapsedRealtimeNanos());
+
+            if (location.isFromMockProvider()) {
+                loc.put("isMock", (double) 1);
+            }
+        } else {
+            loc.put("isMock", (double) 0);
+        }
+
+        // Using NMEA Data to get MSL level altitude
+        if (mLastMslAltitude == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            loc.put("altitude", location.getAltitude());
+        } else {
+            loc.put("altitude", mLastMslAltitude);
+        }
+
+        loc.put("speed", (double) location.getSpeed());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            loc.put("speed_accuracy", (double) location.getSpeedAccuracyMetersPerSecond());
+        }
+        loc.put("heading", (double) location.getBearing());
+        loc.put("time", (double) location.getTime());
+        return loc;
+    }
+
+    public void getCurrentLocation(Result result) {
+        mFusedLocationClient.getCurrentLocation(locationAccuracy, new CancellationToken(){
+            @Override
+            public boolean isCancellationRequested() {
+                return false;
+            }
+
+            @NotNull
+            @Override
+            public CancellationToken onCanceledRequested(@NonNull @NotNull OnTokenCanceledListener onTokenCanceledListener) {
+                return this;
+            }
+        }).addOnCompleteListener(new OnCompleteListener<Location>() {
+            @Override
+            public void onComplete(@NotNull Task<Location> task) {
+                if (task.isSuccessful()) {
+                    result.success(buildLocationMap(task.getResult()));
+                } else {
+                    // Task failed with an exception
+                    result.error("GET_CURRENT_LOCATION_ERROR",
+                            "An unexpected error happened while getting current location:" + task.getException().getMessage(), null);
+                }
+                getLocationResult = null;
+            }
+        });
+    }
 }
