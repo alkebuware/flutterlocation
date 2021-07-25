@@ -6,6 +6,8 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 
+import com.google.android.gms.tasks.CancellationTokenSource;
+
 import java.util.Map;
 
 import io.flutter.plugin.common.BinaryMessenger;
@@ -115,6 +117,11 @@ final class MethodCallHandlerImpl implements MethodCallHandler {
 
     private void onGetLocation(Result result) {
         location.getLocationResult = result;
+        if(location.getLocationCancellationTokenSource != null){
+            location.getLocationCancellationTokenSource.cancel();
+        }
+
+        location.getLocationCancellationTokenSource = new CancellationTokenSource();
         if (!location.checkPermissions()) {
             location.requestPermissions();
         } else {

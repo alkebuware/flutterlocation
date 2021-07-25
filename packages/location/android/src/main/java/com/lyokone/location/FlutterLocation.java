@@ -32,6 +32,8 @@ import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsStatusCodes;
 import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.tasks.CancellationToken;
+import com.google.android.gms.tasks.CancellationTokenSource;
+import com.google.android.gms.tasks.OnCanceledListener;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnTokenCanceledListener;
 import com.google.android.gms.tasks.Task;
@@ -83,6 +85,9 @@ public class FlutterLocation
 
     // Store result until a location is getting resolved
     public Result getLocationResult;
+
+    // Store result until a location is getting resolved
+    public CancellationTokenSource getLocationCancellationTokenSource;
 
     private final LocationManager locationManager;
 
@@ -137,7 +142,7 @@ public class FlutterLocation
                 if (events != null) {
                     startRequestingLocation();
                 }
-                if(getLocationResult != null){
+                if (getLocationResult != null) {
                     getCurrentLocation(getLocationResult);
                 }
                 if (result != null) {
@@ -426,7 +431,7 @@ public class FlutterLocation
     }
 
     private HashMap<String, Object> buildLocationMap(Location location) {
-        if(location == null) return null;
+        if (location == null) return null;
         HashMap<String, Object> loc = new HashMap<>();
         loc.put("latitude", location.getLatitude());
         loc.put("longitude", location.getLongitude());
@@ -472,26 +477,25 @@ public class FlutterLocation
     }
 
     public void getCurrentLocation(Result result) {
-        mFusedLocationClient.getCurrentLocation(locationAccuracy, new CancellationToken(){
-            @Override
-            public boolean isCancellationRequested() {
-                return false;
-            }
 
-            @NotNull
-            @Override
-            public CancellationToken onCanceledRequested(@NonNull @NotNull OnTokenCanceledListener onTokenCanceledListener) {
-                return this;
-            }
-        }).addOnCompleteListener(new OnCompleteListener<Location>() {
+        final CancellationToken token = getLocationCancellationTokenSource.getToken();
+
+        mFusedLocationClient.getCurrentLocation(locationAccuracy, token).addOnCompleteListener(new OnCompleteListener<Location>() {
             @Override
             public void onComplete(@NotNull Task<Location> task) {
                 if (task.isSuccessful()) {
                     result.success(buildLocationMap(task.getResult()));
+                } else if(task.isCanceled()){
+                    result.error("GET_CURRENT_LOCATION_CANCELLED",
+                            "Getting current location operation was cancelled due to another call to getCurrentLocation", null);
                 } else {
                     // Task failed with an exception
+                    String message = "additional information unavailable";
+                    if(task.getException() != null && task.getException().getMessage() != null){
+                        message = "additional information unavailable";
+                    }
                     result.error("GET_CURRENT_LOCATION_ERROR",
-                            "An unexpected error happened while getting current location:" + task.getException().getMessage(), null);
+                            "An unexpected error happened while getting current location: " + message, null);
                 }
                 getLocationResult = null;
             }
