@@ -269,8 +269,8 @@ class FlutterLocationService : Service(), PluginRegistry.RequestPermissionsResul
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
-        permissions: Array<out String>?,
-        grantResults: IntArray?
+        permissions: Array<out String>,
+        grantResults: IntArray
     ): Boolean {
         val permissionsSize = if (foregroundOnly) 1 else 2
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requestCode == REQUEST_PERMISSIONS_REQUEST_CODE && permissions!!.size == permissionsSize &&
