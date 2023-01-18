@@ -10,6 +10,7 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import android.app.PendingIntent
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -53,7 +54,9 @@ class BackgroundNotification(
             ?.setPackage(null)
             ?.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
 
-        return if (intent != null) {
+        return if (intent != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_MUTABLE)
+        } else if (intent != null) {
             PendingIntent.getActivity(context, 0, intent, 0)
         } else {
             null
@@ -266,8 +269,8 @@ class FlutterLocationService : Service(), PluginRegistry.RequestPermissionsResul
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
-        permissions: Array<out String>?,
-        grantResults: IntArray?
+        permissions: Array<out String>,
+        grantResults: IntArray
     ): Boolean {
         val permissionsSize = if (foregroundOnly) 1 else 2
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requestCode == REQUEST_PERMISSIONS_REQUEST_CODE && permissions!!.size == permissionsSize &&
